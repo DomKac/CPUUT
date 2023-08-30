@@ -18,7 +18,7 @@ Queue *queue_new(const size_t n_len, const size_t elem_size) {
     if (elem_size == 0)
         return NULL;
 
-    Queue *const q = calloc(1, sizeof(Queue) + elem_size * n_len);
+    Queue* const q = calloc(1, sizeof(Queue) + elem_size * n_len);
 
     if (q == NULL)
         return NULL;

@@ -69,3 +69,5 @@ iOSInjectionProject/
 
 # MY
 TODO
+*/*.o
+main.out

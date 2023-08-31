@@ -1,22 +1,31 @@
 CC=clang
-CFLAGS=-Weverything -Wpedantic -Wno-declaration-after-statement
+HEADERS=-Iinc
+CFLAGS=-Weverything -Wpedantic -Wno-declaration-after-statement $(HEADERS)
 
-TESTFILES=src/queue.c test/queue_test.c test/test.c
-APPFILES=src/queue.c app/main.c
+SRCFILES=$(wildcard src/*.c)
+TESTFILES=$(wildcard test/*.c)
+APPFILES=$(SRCFILES) app/main.c
 
-TESTOBJFILES=src/queue.o test/queue_test.o test/test.o
-APPOBJFILES=src/queue.o app/main.o
+SRCOBJFILES=$(SRCFILES:.c=.o)
+TESTOBJFILES=$(TESTFILES:.c=.o)
+APPOBJFILES=$(SRCOBJFILES) app/main.o
 
 all: test app
 
-test: $(TESTOBJFILES) 
-	$(CC) $(TESTOBJFILES) -o test.out -l m
+test: $(TESTOBJFILES) $(SRCOBJFILES)
+	$(CC) $(TESTOBJFILES) $(SRCOBJFILES) -o test.out -lm
 
-app: $(APPOBJFILES) 
+app: $(APPOBJFILES)
 	$(CC) $(APPOBJFILES) -o main.out
 
-%.o: %.c queue.h
+src/%.o: src/%.c inc/%.h
 	$(CC) $(CFLAGS) -c $< -o $@
- 
+
+test/%.o: test/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+app/main.o: app/main.c $(wildcard inc/*.h)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
-	rm -rf */*.o *.o *.out
+	rm -rf $(SRCOBJFILES) $(TESTOBJFILES) app/main.o *.out

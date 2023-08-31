@@ -4,6 +4,8 @@
 #include <queue.h>
 #include <stdio.h>
 
+#define PROC_STAT_FILE "/proc/stat"
+
 typedef struct Reader_arguments{
 
     /* FILE* proc_stat_file; ? */

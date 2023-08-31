@@ -1,6 +1,6 @@
-#include "../inc/cpu.h"
-#include "../inc/queue.h"
-#include "../inc/reader.h"
+#include <cpu.h>
+#include <queue.h>
+#include <reader.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -9,7 +9,7 @@
 #define QUEUE_SIZE 100
 
 /* Queues to Producer-Consumer-Problem */
-static Queue* cpu_info_queue;
+static Queue* cpu_stats_queue;
 static Queue* cpu_usage_queue;
 
 /* Threads arguments */
@@ -73,11 +73,15 @@ static int initialize_resources(void) {
 }
 
 static int initialize_queues(void) {
-    size_t queue_elem_size = sizeof(CPU_Array) + sizeof(CPU) * ((size_t)cpus_num + 1);
+    size_t cpu_stats_queue_elem_size = sizeof(CPU_Array) + sizeof(CPU) * ((size_t)cpus_num + 1);
 
-    if ((cpu_info_queue = queue_new(QUEUE_SIZE, queue_elem_size)) == NULL) {
+    if ((cpu_stats_queue = queue_new(QUEUE_SIZE, cpu_stats_queue_elem_size)) == NULL) {
         return -1;
     }
+
+    // if ((cpu_usage_queue = queue_new(QUEUE_SIZE, ...)) == NULL) {
+    //     return -1;
+    // }
 
     /* TO BE CONTINUED */
 
@@ -99,14 +103,14 @@ static int initialize_reader_args(void) {
         return -1;
     }
 
-    if (cpu_info_queue == NULL) {
+    if (cpu_stats_queue == NULL) {
         perror("CPU info queue didn't initialized");
         return -1;
     }
 
     reader_args = (Reader_arguments){
         .cpu_num = (size_t)cpus_num + 1, /* /proc/stat has 1 additional general cpu stats with sum of real cpus stats*/
-        .cpu_info_queue = cpu_info_queue,
+        .cpu_stats_queue = cpu_stats_queue,
     };
 
     return 0;
@@ -122,8 +126,8 @@ static int initialize_threads(void) {
 
 static void delete_resources(void) {
 
-    if (cpu_info_queue != NULL)
-        free(cpu_info_queue);
+    if (cpu_stats_queue != NULL)
+        free(cpu_stats_queue);
 
     // if (reader_args != NULL)
     //     free(reader_args);

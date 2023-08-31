@@ -21,6 +21,11 @@ typedef struct CPU_Array {
     CPU arr[];
 } CPU_Array;
 
+typedef struct CPU_Usage_Array {
+    size_t cpu_num;
+    double arr[];
+} CPU_Usage_Array;
+
 CPU_Array* cpu_array_new(size_t n_elem);
 void cpu_array_delete(CPU_Array* cpu_arr);
 

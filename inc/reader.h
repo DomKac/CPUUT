@@ -10,7 +10,7 @@ typedef struct Reader_arguments{
 
     /* FILE* proc_stat_file; ? */
     size_t cpu_num; /* Liczba cpu w /proc/stat */
-    Queue *cpu_info_queue;
+    Queue *cpu_stats_queue;
     /* Watchhouse */
 
 } Reader_arguments;

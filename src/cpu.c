@@ -1,7 +1,7 @@
 #include "cpu.h"
-#include <stdlib.h>
 #include <memory.h>
-#include <error.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 CPU_Array* cpu_array_new(register const size_t cpu_num) {
     

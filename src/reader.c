@@ -2,6 +2,7 @@
 #include <reader.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 
 // static long get_cpu_num(void);
 static void print_cpu_info(const CPU_Array *const cpu_arr, size_t cpu_num);
@@ -15,23 +16,22 @@ void *reader_func(void *reader_args) {
     }
 
     Reader_arguments* reader = reader_args;
-    /* ? */
     if (reader == NULL) {
         perror("Reader: wrong transition from reader_args");
         return NULL;
     }
 
-    FILE *proc_stat_file = fopen(PROC_STAT_FILE, "r");
-    /* ? */
+    FILE* proc_stat_file = fopen(PROC_STAT_FILE, "r");
     if (proc_stat_file == NULL) {
         perror("Reader: IO error");
         return NULL;
     }
 
-    CPU_Array *cpu_arr = cpu_array_new(reader->cpu_num + 1);
-
+    CPU_Array* const cpu_arr = cpu_array_new(reader->cpu_num + 1);
     if (cpu_arr == NULL)
         return NULL;
+
+    const struct timespec sleep_time = {.tv_nsec = 0, .tv_sec = 1};
 
     for (size_t j = 0; j < 10; j++) {
         for (size_t i = 0; i < reader->cpu_num; i++) {
@@ -60,10 +60,14 @@ void *reader_func(void *reader_args) {
 
         print_cpu_info(cpu_arr, reader->cpu_num);
 
-        sleep(2);
+        queue_insert(reader->cpu_stats_queue, cpu_arr);
+
+        *cpu_arr = (CPU_Array){0};
+
+        nanosleep(&sleep_time, NULL);
     }
 
-    free(cpu_arr);
+    cpu_array_delete(cpu_arr);
     fclose(proc_stat_file);
 }
 

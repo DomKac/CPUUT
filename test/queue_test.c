@@ -18,6 +18,8 @@ static void queue_pop_single_test(void);
 static void queue_pop_multiple_test(void);
 static void queue_pop_on_empty_test(void);
 
+static void queue_array_test(void);
+
 static void queue_new_test(void) {
     {
         register const size_t n_elem = 10;
@@ -315,6 +317,27 @@ static void queue_pop_on_empty_test(void) {
     }
 }
 
+static void queue_array_test(void) {
+    register const size_t n_elem = 10;
+    register const size_t elem_size = sizeof(int[3]);
+    int input[3] = {2, 3, 5};
+    int output[3];
+
+    Queue *q = queue_new(n_elem, elem_size);
+
+    assert(q != NULL);
+
+    queue_insert(q, input);
+    assert(!queue_is_empty(q));
+    queue_pop(q, output);
+
+    for (size_t i = 0; i < 3; i++) {
+        assert(input[i] == output[i]);
+    }
+
+    queue_delete(q);
+}
+
 void queue_main_test(void) {
     queue_new_test();
     queue_delete_test();
@@ -329,4 +352,6 @@ void queue_main_test(void) {
     queue_pop_single_test();
     queue_pop_multiple_test();
     queue_pop_on_empty_test();
+
+    queue_array_test();
 }

@@ -1,6 +1,7 @@
 #include <cpu.h>
 #include <queue.h>
 #include <reader.h>
+#include <analyzer.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -14,19 +15,22 @@ static Queue* cpu_usage_queue;
 
 /* Threads arguments */
 static Reader_arguments reader_args;
+static Analyzer_arguments analyzer_args;
 
 /* Threads */
 static pthread_t reader;
+static pthread_t analyzer;
 
 /* Initialization functions */
 static int initialize_threads(void);
 static int initialize_resources(void);
 static int initialize_queues(void);
 static int initialize_reader_args(void);
+static int initialize_analyzer_args(void);
 
 /* Clear functions */
 static void delete_resources(void);
-static void finalize_threads(void);
+static void join_threads(void);
 
 /* Other */
 static long cpus_num;
@@ -34,18 +38,17 @@ static long get_cpu_num(void);
 
 int main(void) {
 
-    puts("test 1");
-    if (initialize_resources())
+    if (initialize_resources()) {
+        delete_resources();
         return EXIT_FAILURE;
+    }
 
-    puts("test 2");
-
-    if (initialize_threads())
+    if (initialize_threads()) {
+        delete_resources();
         return EXIT_FAILURE;
+    }
 
-    puts("test 3");
-
-    finalize_threads();
+    join_threads();
 
     delete_resources();
 
@@ -53,7 +56,7 @@ int main(void) {
 }
 
 static int initialize_resources(void) {
-
+    
     if ((cpus_num = get_cpu_num()) < 1) {
         return -1;
     }
@@ -67,76 +70,121 @@ static int initialize_resources(void) {
         return -1;
     }
 
+    if (initialize_analyzer_args() != 0) {
+        perror("Analyzer arguments initialization failed");
+        return -1;
+    }
+
     /* TO BE CONTINUED */
 
     return 0;
 }
 
 static int initialize_queues(void) {
-    size_t cpu_stats_queue_elem_size = sizeof(CPU_Array) + sizeof(CPU) * ((size_t)cpus_num + 1);
+    // size_t cpu_stats_queue_elem_size = sizeof(CPU_Array) + sizeof(CPU) * ((size_t)cpus_num + 1);
 
-    if ((cpu_stats_queue = queue_new(QUEUE_SIZE, cpu_stats_queue_elem_size)) == NULL) {
+    size_t cpu_stats_elem_size = sizeof(CPU[cpus_num]);
+
+    if ((cpu_stats_queue = queue_new(QUEUE_SIZE, cpu_stats_elem_size)) == NULL) {
         return -1;
     }
 
-    // if ((cpu_usage_queue = queue_new(QUEUE_SIZE, ...)) == NULL) {
-    //     return -1;
-    // }
+    size_t cpu_usage_elem_size = sizeof(double[cpus_num]);
+
+    if ((cpu_usage_queue = queue_new(QUEUE_SIZE, cpu_usage_elem_size)) == NULL) {
+        return -1;
+    }
 
     /* TO BE CONTINUED */
 
     return 0;
 }
 
-/* Możliwe że lepiej przenieść do reader.c */
 static int initialize_reader_args(void) {
 
-    // reader_args = malloc(sizeof(Reader_arguments));
-
-    // if (reader_args == NULL) {
-    //     perror("Reader_args malloc failed");
-    //     return -1;
-    // }
-
-    if (cpus_num == 0) {
-        perror("Didn't find any cpu");
+    if (cpus_num < 1) {
+        perror("Can't find any cpu");
         return -1;
     }
 
     if (cpu_stats_queue == NULL) {
-        perror("CPU info queue didn't initialized");
+        perror("CPU stats queue doesn't initialized");
         return -1;
     }
 
-    reader_args = (Reader_arguments){
-        .cpu_num = (size_t)cpus_num + 1, /* /proc/stat has 1 additional general cpu stats with sum of real cpus stats*/
+    /* może lepiej do reader.c ? */
+    FILE *proc_stat_file = fopen("/proc/stat", "r");
+    if (proc_stat_file == NULL) {
+        perror("Can't open /proc/stat file");
+        return -1;
+    }
+
+    reader_args = (Reader_arguments) {
+        .cpu_num = (size_t)cpus_num,
         .cpu_stats_queue = cpu_stats_queue,
+        .proc_stat_file = proc_stat_file,
+    };
+
+    return 0;
+}
+
+static int initialize_analyzer_args(void) {
+
+    if (cpus_num < 1) {
+        perror("Can't find any cpu");
+        return -1;
+    }
+
+    if (cpu_stats_queue == NULL) {
+        perror("CPU stats queue doesn't initialized");
+        return -1;
+    }
+
+    if (cpu_usage_queue == NULL) {
+        perror("CPU usage queue doesn't initialized");
+        return -1;
+    }
+
+    analyzer_args = (Analyzer_arguments) {
+        .cpu_num = (size_t)cpus_num, 
+        .cpu_stats_queue = cpu_stats_queue,
+        .cpu_usage_queue = cpu_usage_queue,
     };
 
     return 0;
 }
 
 static int initialize_threads(void) {
+
     if (pthread_create(&reader, NULL, reader_func, &reader_args)) {
         perror("Reader creation failed");
         return -1;
     }
+
+    if (pthread_create(&analyzer, NULL, analyzer_func, &analyzer_args)) {
+        perror("Analyzer creation failed");
+        return -1;
+    }
+
+    /* TO BE CONTINUED */
+
     return 0;
 }
 
 static void delete_resources(void) {
 
     if (cpu_stats_queue != NULL)
-        free(cpu_stats_queue);
+        queue_delete(cpu_stats_queue);
 
-    // if (reader_args != NULL)
-    //     free(reader_args);
+    if (cpu_usage_queue != NULL)
+        queue_delete(cpu_usage_queue);
 
     /* TO BE CONTINUED */
 }
 
-static void finalize_threads(void) {
+static void join_threads(void) {
     pthread_join(reader, NULL);
+    pthread_join(analyzer, NULL);
 }
 
 static long get_cpu_num(void) {
@@ -154,5 +202,6 @@ static long get_cpu_num(void) {
         return -1;
     }
 
-    return ret;
+    /* /proc/stat has 1 additional general cpu stats with sum of real cpus stats*/
+    return ret + 1; 
 }

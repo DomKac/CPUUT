@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 static double calulate_cpu_usage(const CPU* const cpu);
-static void print_cpu_info(const CPU_Array *const cpu_arr, size_t cpu_num);
+static void print_cpu_info(size_t cpu_num, const CPU cpu_arr[cpu_num]);
 
 void* analyzer_func(void* analyzer_args) {
     
@@ -18,7 +18,7 @@ void* analyzer_func(void* analyzer_args) {
     Queue* cpu_usage_queue = NULL;
 
     {
-        Analyzer_arguments *temp_arg = analyzer_args;
+        Analyzer_arguments* temp_arg = analyzer_args;
         
         cpu_num = temp_arg->cpu_num;
         if (cpu_num == 0) {
@@ -39,39 +39,34 @@ void* analyzer_func(void* analyzer_args) {
         }
     }
 
-    CPU_Array* cpu_arr = cpu_array_new(cpu_num);
-    if (cpu_arr == NULL) {
-        return NULL;
-    }
-
+    CPU cpu_arr[cpu_num];
     size_t cpu_usage = 0;
 
     /* THREAD "MAIN WORK" LOOP */
-    for (;;) {
+    size_t poped = 0;
+    while (poped < 10) {
         if (!queue_is_empty(cpu_stats_queue)) {
             queue_pop(cpu_stats_queue, cpu_arr);
-            
-            print_cpu_info(cpu_arr, cpu_num);
+            print_cpu_info(cpu_num, cpu_arr);
+            poped++;
         }
+        sleep(1);
     }
-
-    /* FREE RESOURCES */
-    cpu_array_delete(cpu_arr);
 }
 
-static void print_cpu_info(const CPU_Array *const cpu_arr, size_t cpu_num) {
+static void print_cpu_info(size_t cpu_num, const CPU cpu_arr[cpu_num]) {
     for (size_t i = 0; i < cpu_num; i++) {
-        printf("%s ", cpu_arr->arr[i].name);
-        printf("%zu ", cpu_arr->arr[i].user);
-        printf("%zu ", cpu_arr->arr[i].nice);
-        printf("%zu ", cpu_arr->arr[i].system);
-        printf("%zu ", cpu_arr->arr[i].idle);
-        printf("%zu ", cpu_arr->arr[i].iowait);
-        printf("%zu ", cpu_arr->arr[i].irq);
-        printf("%zu ", cpu_arr->arr[i].softirq);
-        printf("%zu ", cpu_arr->arr[i].steal);
-        printf("%zu ", cpu_arr->arr[i].guest);
-        printf("%zu\n", cpu_arr->arr[i].guest_nice);
+        printf("%s ", cpu_arr[i].name);
+        printf("%zu ", cpu_arr[i].user);
+        printf("%zu ", cpu_arr[i].nice);
+        printf("%zu ", cpu_arr[i].system);
+        printf("%zu ", cpu_arr[i].idle);
+        printf("%zu ", cpu_arr[i].iowait);
+        printf("%zu ", cpu_arr[i].irq);
+        printf("%zu ", cpu_arr[i].softirq);
+        printf("%zu ", cpu_arr[i].steal);
+        printf("%zu ", cpu_arr[i].guest);
+        printf("%zu\n", cpu_arr[i].guest_nice);
     }
     puts("");
 }

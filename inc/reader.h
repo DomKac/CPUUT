@@ -4,9 +4,8 @@
 #include <queue.h>
 #include <stdio.h>
 
-typedef struct Reader_arguments{
+typedef struct Reader_arguments {
 
-    /* FILE* proc_stat_file; ? */
     size_t cpu_num; /* Liczba cpu w /proc/stat */
     Queue* cpu_stats_queue;
     FILE* proc_stat_file;

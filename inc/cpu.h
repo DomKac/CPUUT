@@ -1,5 +1,6 @@
 #ifndef CPU_H
 #define CPU_H
+
 #include <stddef.h>
 typedef struct CPU {
     char name[8];

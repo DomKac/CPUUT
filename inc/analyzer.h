@@ -1,7 +1,6 @@
 #ifndef ANALYZER_H
 #define ANALYZER_H
 
-#include <cpu.h>
 #include <queue.h>
 typedef struct Analyzer_arguments {
     

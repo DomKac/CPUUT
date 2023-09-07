@@ -184,17 +184,17 @@ static int initialize_printer_args(void) {
 
 static int initialize_threads(void) {
 
-    if (pthread_create(&reader, NULL, reader_func, &reader_args)) {
+    if (pthread_create(&reader, NULL, reader_func, &reader_args) != 0) {
         perror("Reader creation failed");
         return -1;
     }
 
-    if (pthread_create(&analyzer, NULL, analyzer_func, &analyzer_args)) {
+    if (pthread_create(&analyzer, NULL, analyzer_func, &analyzer_args) != 0) {
         perror("Analyzer creation failed");
         return -1;
     }
 
-    if (pthread_create(&printer, NULL, printer_func, &printer_args)) {
+    if (pthread_create(&printer, NULL, printer_func, &printer_args) != 0) {
         perror("Printer creation failed");
         return -1;
     }
@@ -216,9 +216,16 @@ static void delete_resources(void) {
 }
 
 static void join_threads(void) {
-    pthread_join(reader, NULL);
-    pthread_join(analyzer, NULL);
-    pthread_join(printer, NULL);
+
+    if (pthread_join(reader, NULL) != 0) {
+        perror("Failed to join Reader");
+    }
+    if (pthread_join(analyzer, NULL) != 0) {
+        perror("Failed to join Analyzer");
+    }
+    if (pthread_join(printer, NULL) != 0) {
+        perror("Failed to join Printer");
+    }
 }
 
 static long get_cpu_num(void) {

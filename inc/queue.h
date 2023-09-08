@@ -10,7 +10,7 @@
 
 typedef struct Queue Queue;
 
-Queue *queue_new(size_t max_size, size_t elem_size);
+Queue* queue_new(size_t max_size, size_t elem_size);
 void queue_delete(Queue* q);
 
 int queue_insert(Queue* restrict q, const void* const restrict elem);
@@ -18,5 +18,7 @@ int queue_pop(Queue* restrict q, void* const restrict elem);
 
 bool queue_is_empty(const Queue* q);
 bool queue_is_full(const Queue* q);
+
+size_t queue_size(const Queue* q);
 
 #endif

@@ -95,3 +95,9 @@ bool queue_is_full(const Queue* q) {
         return false;
     return q->n_elem == q->cur_size;
 }
+
+size_t queue_size(const Queue* const q) {
+    if (q == NULL)
+        return 0;
+    return q->cur_size;
+}

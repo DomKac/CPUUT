@@ -3,16 +3,22 @@
 #include <reader.h>
 #include <analyzer.h>
 #include <printer.h>
+#include <pcp_sentry.h>
+
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#define QUEUE_SIZE 100
+#define QUEUE_SIZE 10
 
 /* Queues to Producer-Consumer-Problem */
 static Queue* cpu_stats_queue;
 static Queue* cpu_usage_queue;
+
+/* PCP Sentries */
+static PCP_Sentry cpu_stats_queue_sentry;
+static PCP_Sentry cpu_usage_queue_sentry;
 
 /* Threads arguments */
 static Reader_arguments reader_args;
@@ -28,6 +34,7 @@ static pthread_t printer;
 static int initialize_threads(void);
 static int initialize_resources(void);
 static int initialize_queues(void);
+static int initialize_pcp_sentries(void);
 static int initialize_reader_args(void);
 static int initialize_analyzer_args(void);
 static int initialize_printer_args(void);
@@ -42,13 +49,14 @@ static long get_cpu_num(void);
 
 int main(void) {
 
-    if (initialize_resources()) {
+    if (initialize_resources() != 0) {
         delete_resources();
         return EXIT_FAILURE;
     }
 
-    if (initialize_threads()) {
+    if (initialize_threads() != 0) {
         delete_resources();
+        
         return EXIT_FAILURE;
     }
 
@@ -66,6 +74,12 @@ static int initialize_resources(void) {
     }
 
     if (initialize_queues() != 0) {
+        perror("Queues initialization failed");
+        return -1;
+    }
+
+    if (initialize_pcp_sentries() != 0) {
+        perror("PCP sentries initialization failed");
         return -1;
     }
 
@@ -108,6 +122,19 @@ static int initialize_queues(void) {
     return 0;
 }
 
+static int initialize_pcp_sentries(void) {
+    
+    if (pcp_sentry_init(&cpu_stats_queue_sentry) != 0) {
+        return -1;
+    }
+
+    if (pcp_sentry_init(&cpu_usage_queue_sentry) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
 static int initialize_reader_args(void) {
 
     if (cpus_num < 1) {
@@ -120,6 +147,7 @@ static int initialize_reader_args(void) {
         return -1;
     }
 
+
     /* może lepiej do reader.c ? */
     FILE *proc_stat_file = fopen("/proc/stat", "r");
     if (proc_stat_file == NULL) {
@@ -131,6 +159,7 @@ static int initialize_reader_args(void) {
         .cpu_num = (size_t)cpus_num,
         .cpu_stats_queue = cpu_stats_queue,
         .proc_stat_file = proc_stat_file,
+        .cpu_stats_queue_sentry = &cpu_stats_queue_sentry,
     };
 
     return 0;
@@ -157,6 +186,8 @@ static int initialize_analyzer_args(void) {
         .cpu_num = (size_t)cpus_num, 
         .cpu_stats_queue = cpu_stats_queue,
         .cpu_usage_queue = cpu_usage_queue,
+        .cpu_stats_queue_sentry = &cpu_stats_queue_sentry,
+        .cpu_usage_queue_sentry = &cpu_usage_queue_sentry,
     };
 
     return 0;
@@ -177,6 +208,7 @@ static int initialize_printer_args(void) {
     printer_args = (Printer_arguments){
         .cpu_num = (size_t)cpus_num,
         .cpu_usage_queue = cpu_usage_queue,
+        .cpu_usage_queue_sentry = &cpu_usage_queue_sentry,
     };
 
     return 0;
@@ -211,6 +243,9 @@ static void delete_resources(void) {
 
     if (cpu_usage_queue != NULL)
         queue_delete(cpu_usage_queue);
+
+    pcp_sentry_destroy(&cpu_stats_queue_sentry);
+    pcp_sentry_destroy(&cpu_usage_queue_sentry);
 
     /* TO BE CONTINUED */
 }

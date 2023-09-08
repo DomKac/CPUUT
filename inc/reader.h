@@ -2,14 +2,15 @@
 #define READER_H
 
 #include <queue.h>
+#include <pcp_sentry.h>
 #include <stdio.h>
 
 typedef struct Reader_arguments {
 
     size_t cpu_num; /* Liczba cpu w /proc/stat */
-    Queue* cpu_stats_queue;
     FILE* proc_stat_file;
-    /* Watchhouse */
+    Queue* cpu_stats_queue;
+    PCP_Sentry* cpu_stats_queue_sentry;
 
 } Reader_arguments;
 

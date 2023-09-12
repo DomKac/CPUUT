@@ -8,7 +8,7 @@ static void print_cpu_info(size_t cpu_num, const CPU cpu_arr[cpu_num]);
 static double cpu_usage(register const CPU cur_cpu, register const CPU prev_cpu);
 static int print_cpu_usage(register const size_t cpu_num, const double cpu_usage_arr[const cpu_num]);
 
-void *analyzer_func(void *analyzer_args) {
+void* analyzer_func(void *analyzer_args) {
 
     /* INITIALIZATIONS & CONTRACTS */
     if (analyzer_args == NULL) {
@@ -21,6 +21,7 @@ void *analyzer_func(void *analyzer_args) {
     Queue* cpu_usage_queue = NULL;
     PCP_Sentry* cpu_stats_queue_sentry = NULL;
     PCP_Sentry* cpu_usage_queue_sentry = NULL;
+    volatile sig_atomic_t* signal_received = NULL;
 
     {
         Analyzer_arguments* temp_arg = analyzer_args;
@@ -54,6 +55,12 @@ void *analyzer_func(void *analyzer_args) {
             perror("Analyzer: variable assign failed (cpu_usage_queue_sentry)");
             return NULL;
         }
+
+        signal_received = temp_arg->signal_received;
+        if (signal_received == NULL) {
+            perror("Analyzer: variable assign failed (signal_received)");
+            return NULL;
+        }
     }
 
     CPU cur_cpu_arr[cpu_num];
@@ -63,8 +70,7 @@ void *analyzer_func(void *analyzer_args) {
     memset(prev_cpu_arr, 0, sizeof(CPU[cpu_num]));
 
     /* THREAD "MAIN WORK" LOOP */
-    while (true) {
-
+    while (!*signal_received) {
         /* Pop from stats queue */
         pcp_sentry_lock(cpu_stats_queue_sentry);
         if (queue_is_empty(cpu_stats_queue)) {
@@ -73,17 +79,22 @@ void *analyzer_func(void *analyzer_args) {
             // tutaj trzeba watchdoga
         }
 
+        if (*signal_received) {
+            pcp_sentry_unlock(cpu_stats_queue_sentry);
+            pcp_sentry_call_consumer(cpu_usage_queue_sentry);
+            puts("Analyer: Dostałem sygnał, kończę!");
+            break;
+        }
+
         queue_pop(cpu_stats_queue, cur_cpu_arr);
+
         printf("Analyzer: Pobrałem stats z kolejki\n");
 
         pcp_sentry_call_producer(cpu_stats_queue_sentry);
         pcp_sentry_unlock(cpu_stats_queue_sentry);
 
         /* Calculate cpu usage */
-        if (calulate_cpus_usage(cpu_num, cur_cpu_arr, prev_cpu_arr, cpu_usage_arr) != 0) {
-            printf("error in calculate_cpus_usage!\n");
-            break;
-        }
+        calulate_cpus_usage(cpu_num, cur_cpu_arr, prev_cpu_arr, cpu_usage_arr);
         memcpy(prev_cpu_arr, cur_cpu_arr, sizeof(CPU[cpu_num]));
 
         /* Insert into usage queue */
@@ -93,7 +104,7 @@ void *analyzer_func(void *analyzer_args) {
             pcp_sentry_wait_for_consumer(cpu_usage_queue_sentry);
         }
 
-        if(queue_insert(cpu_usage_queue, cpu_usage_arr));
+        queue_insert(cpu_usage_queue, cpu_usage_arr);
         printf("Analyzer: Wstawiam usage z kolejki\n");
 
         puts("Printer cpu usage:");
@@ -102,7 +113,12 @@ void *analyzer_func(void *analyzer_args) {
 
         pcp_sentry_call_consumer(cpu_usage_queue_sentry);
         pcp_sentry_unlock(cpu_usage_queue_sentry);
+        printf("Analyzer: signal received = %d\n", *signal_received);
     }
+    printf("Analyzer after loop: signal received = %d\n", *signal_received);
+
+    puts("Analyzer: Zrobiłem co miałem zrobić!");
+    return NULL;
 }
 
 static int calulate_cpus_usage(const register size_t cpu_num, const CPU cur_cpu_arr[const cpu_num], const CPU prev_cpu_arr[const cpu_num], double cpu_usage_arr[cpu_num]) {

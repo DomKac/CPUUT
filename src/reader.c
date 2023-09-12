@@ -5,7 +5,7 @@
 #include <time.h>
 
 /* musimy mieć kolejkę w którą władujemy przeczytane informacje */
-void *reader_func(void *reader_args) {
+void* reader_func(void *reader_args) {
 
     /* INITIALIZATIONS & CONTRACTS */
     if (reader_args == NULL) {
@@ -14,17 +14,19 @@ void *reader_func(void *reader_args) {
     }
 
     size_t cpu_num = 0;
-    FILE *proc_stat_file = NULL;
+    FILE* proc_stat_file = NULL;
     Queue* cpu_stats_queue = NULL;
     PCP_Sentry* cpu_stats_queue_sentry = NULL;
+    volatile sig_atomic_t* signal_received = NULL;
 
     {
-        Reader_arguments* temp_arg = reader_args;
+        Reader_arguments *temp_arg = reader_args;
+        // Reader_arguments *temp_arg = *(Reader_arguments **)reader_args;
 
         cpu_num = temp_arg->cpu_num;
         if (cpu_num == 0) {
-            perror("Reader: variable assign failed (cpu_num)");
-            return NULL;
+             perror("Reader: variable assign failed (cpu_num)");
+             return NULL;
         }
 
         proc_stat_file = temp_arg->proc_stat_file;
@@ -44,13 +46,20 @@ void *reader_func(void *reader_args) {
             perror("Reader: variable assign failed (cpu_stats_queue_sentry)");
             return NULL;
         }
+
+        signal_received = temp_arg->signal_received;
+        if (signal_received == NULL) {
+            perror("Reader: variable assign failed (signal_received)");
+            return NULL;
+        }
     }
 
     const struct timespec sleep_time = {.tv_nsec = 0, .tv_sec = 1};
     CPU cpu_arr[cpu_num];
 
+    printf("signal received = %d\n", *signal_received);
     /* THREAD "MAIN WORK" LOOP */
-    while (true) {
+    while (!*signal_received) {
         for (size_t i = 0; i < cpu_num; i++) {
             if (!fscanf(proc_stat_file, "%s %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu\n", 
                  cpu_arr[i].name, 
@@ -67,6 +76,7 @@ void *reader_func(void *reader_args) {
             {
                 perror("Reader: reading from file failed");
                 fclose(proc_stat_file);
+                raise(SIGINT);
                 return NULL;
             }
         }
@@ -87,8 +97,16 @@ void *reader_func(void *reader_args) {
         rewind(proc_stat_file);
 
         nanosleep(&sleep_time, NULL);
+        printf("Reader: signal received = %d\n", *signal_received);
     }
 
-    fclose(proc_stat_file);
-}
+    printf("Reader after loop: signal received = %d\n", *signal_received);
 
+    /* call consumer if it waits */
+    pcp_sentry_call_consumer(cpu_stats_queue_sentry);
+
+    puts("Reader: Zrobiłem co miałem zrobić!");
+    fclose(proc_stat_file);
+
+    return NULL;
+}

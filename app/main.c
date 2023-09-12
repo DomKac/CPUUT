@@ -9,6 +9,8 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
+#include <string.h>
 
 #define QUEUE_SIZE 10
 
@@ -16,7 +18,8 @@
 static Queue* cpu_stats_queue;
 static Queue* cpu_usage_queue;
 
-/* PCP Sentries */
+/* Critical section & PCP */
+static pthread_mutex_t stopped_mutex;
 static PCP_Sentry cpu_stats_queue_sentry;
 static PCP_Sentry cpu_usage_queue_sentry;
 
@@ -30,11 +33,16 @@ static pthread_t reader;
 static pthread_t analyzer;
 static pthread_t printer;
 
+/* Signal handling */
+static volatile sig_atomic_t signal_received = 0;
+static void signal_term(int signum);
+
 /* Initialization functions */
-static int initialize_threads(void);
 static int initialize_resources(void);
 static int initialize_queues(void);
 static int initialize_pcp_sentries(void);
+
+static int initialize_threads(void);
 static int initialize_reader_args(void);
 static int initialize_analyzer_args(void);
 static int initialize_printer_args(void);
@@ -49,16 +57,50 @@ static long get_cpu_num(void);
 
 int main(void) {
 
+    struct sigaction action;
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_handler = signal_term;
+
+    sigset_t sig_mask;
+    sigemptyset(&sig_mask);
+    sigaddset(&sig_mask, SIGINT);
+
+    if (sigaction(SIGINT, &action, NULL) != 0) {
+        perror("Sigaction failed");
+        return -1;
+    }
+
+    if (pthread_sigmask(SIG_BLOCK, &sig_mask, NULL) != 0) {
+        perror("Sigmask failed");
+        return -1;
+    }
+
     if (initialize_resources() != 0) {
         delete_resources();
         return EXIT_FAILURE;
     }
 
     if (initialize_threads() != 0) {
+        raise(SIGINT);
+        join_threads();
         delete_resources();
-        
         return EXIT_FAILURE;
     }
+
+    if (pthread_sigmask(SIG_UNBLOCK, &sig_mask, NULL) != 0) {
+        perror("Sigmask failed");
+        return -1;
+    }
+
+    /* wait for SIGINT */
+    while (signal_received == 0) {
+        pause();
+        errno = 0;
+    }
+
+    // pthread_mutex_lock(&stopped_mutex);
+    // stopped = true;
+    // pthread_mutex_unlock(&stopped_mutex);
 
     join_threads();
 
@@ -123,7 +165,7 @@ static int initialize_queues(void) {
 }
 
 static int initialize_pcp_sentries(void) {
-    
+
     if (pcp_sentry_init(&cpu_stats_queue_sentry) != 0) {
         return -1;
     }
@@ -147,9 +189,8 @@ static int initialize_reader_args(void) {
         return -1;
     }
 
-
     /* może lepiej do reader.c ? */
-    FILE *proc_stat_file = fopen("/proc/stat", "r");
+    FILE* proc_stat_file = fopen("/proc/stat", "r");
     if (proc_stat_file == NULL) {
         perror("Can't open /proc/stat file");
         return -1;
@@ -160,6 +201,7 @@ static int initialize_reader_args(void) {
         .cpu_stats_queue = cpu_stats_queue,
         .proc_stat_file = proc_stat_file,
         .cpu_stats_queue_sentry = &cpu_stats_queue_sentry,
+        .signal_received = &signal_received,
     };
 
     return 0;
@@ -182,12 +224,13 @@ static int initialize_analyzer_args(void) {
         return -1;
     }
 
-    analyzer_args = (Analyzer_arguments) {
-        .cpu_num = (size_t)cpus_num, 
+    analyzer_args = (Analyzer_arguments){
+        .cpu_num = (size_t)cpus_num,
         .cpu_stats_queue = cpu_stats_queue,
         .cpu_usage_queue = cpu_usage_queue,
         .cpu_stats_queue_sentry = &cpu_stats_queue_sentry,
         .cpu_usage_queue_sentry = &cpu_usage_queue_sentry,
+        .signal_received = &signal_received,
     };
 
     return 0;
@@ -209,6 +252,7 @@ static int initialize_printer_args(void) {
         .cpu_num = (size_t)cpus_num,
         .cpu_usage_queue = cpu_usage_queue,
         .cpu_usage_queue_sentry = &cpu_usage_queue_sentry,
+        .signal_received = &signal_received,
     };
 
     return 0;
@@ -255,12 +299,21 @@ static void join_threads(void) {
     if (pthread_join(reader, NULL) != 0) {
         perror("Failed to join Reader");
     }
+
     if (pthread_join(analyzer, NULL) != 0) {
         perror("Failed to join Analyzer");
     }
+
     if (pthread_join(printer, NULL) != 0) {
         perror("Failed to join Printer");
     }
+
+}
+
+static void signal_term(int signum) {
+    // if (signum == SIGINT)
+    signal_received = 1;
+    puts("Otrzymałem sygnał");
 }
 
 static long get_cpu_num(void) {

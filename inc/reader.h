@@ -4,6 +4,7 @@
 #include <queue.h>
 #include <pcp_sentry.h>
 #include <stdio.h>
+#include <signal.h>
 
 typedef struct Reader_arguments {
 
@@ -11,6 +12,7 @@ typedef struct Reader_arguments {
     FILE* proc_stat_file;
     Queue* cpu_stats_queue;
     PCP_Sentry* cpu_stats_queue_sentry;
+    volatile sig_atomic_t* signal_received;
 
 } Reader_arguments;
 

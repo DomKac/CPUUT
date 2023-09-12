@@ -13,6 +13,7 @@ void* printer_func(void* printer_args) {
     register size_t cpu_num = 0;
     Queue* cpu_usage_queue = NULL;
     PCP_Sentry* cpu_usage_queue_sentry;
+    volatile sig_atomic_t* signal_received = NULL;
 
     {
         Printer_arguments *temp_arg = printer_args;
@@ -34,39 +35,41 @@ void* printer_func(void* printer_args) {
             perror("Printer: variable assign failed (cpu_usage_queue_sentry)");
             return NULL;
         }
+
+        signal_received = temp_arg->signal_received;
+        if (signal_received == NULL) {
+            perror("Printer: variable assign failed (signal_received)");
+            return NULL;
+        }
     }
 
     double cpu_usage_arr[cpu_num];
 
     /* THREAD "MAIN WORK" LOOP */
-    while (true) {
-
+    while (!*signal_received) {
         pcp_sentry_lock(cpu_usage_queue_sentry);
         if (queue_is_empty(cpu_usage_queue)) {
             printf("Printer: Czekam na uzupełnienie kolejki przez Analyzer\n");
             pcp_sentry_wait_for_producer(cpu_usage_queue_sentry);
-            if (queue_is_empty(cpu_usage_queue)) {
-                printf("Printer: JAPIERDOLE KOLEJKA PUSTA\n");
-            }
         }
 
-        int error = queue_pop(cpu_usage_queue, cpu_usage_arr);
+        if (*signal_received) {
+            pcp_sentry_unlock(cpu_usage_queue_sentry);
+            puts("Dostałem sygnał, kończę!");
+            break;
+        }
 
-        if (error == 0) {
-            printf("Printer: Pobieram usage z kolejki\n");
-            print_cpu_usage(cpu_num, cpu_usage_arr);
-        }
-        else if (error == EQUEUE_EMPTY) {
-            printf("Kolejka pusta!\n");
-        }
-        else if (error == EQUEUE_NULLARG)
-        {
-            printf("Kolejka EQUEUE_NULLARG\n");
-        }
+        queue_pop(cpu_usage_queue, cpu_usage_arr);
 
         pcp_sentry_call_producer(cpu_usage_queue_sentry);
-        pcp_sentry_unlock(cpu_usage_queue_sentry);          
+        pcp_sentry_unlock(cpu_usage_queue_sentry);
+        printf("Printer: signal received = %d\n", *signal_received);
     }
+
+    printf("Printer after loop: signal received = %d\n", *signal_received);
+
+    puts("Printer: Zrobiłem co miałem zrobić!");
+    return NULL;
 }
 
 static int print_cpu_usage(register const size_t cpu_num, const double cpu_usage_arr[const cpu_num]) {

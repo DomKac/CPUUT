@@ -3,6 +3,8 @@
 
 #include <pcp_sentry.h>
 #include <queue.h>
+#include <signal.h>
+
 typedef struct Analyzer_arguments {
     
     size_t cpu_num; /* Liczba cpu w /proc/stat */
@@ -10,6 +12,7 @@ typedef struct Analyzer_arguments {
     Queue* cpu_usage_queue;
     PCP_Sentry* cpu_stats_queue_sentry;
     PCP_Sentry* cpu_usage_queue_sentry;
+    volatile sig_atomic_t* signal_received;
 
 } Analyzer_arguments;
 

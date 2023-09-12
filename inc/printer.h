@@ -3,12 +3,14 @@
 
 #include <queue.h>
 #include <pcp_sentry.h>
+#include <signal.h>
 
 typedef struct Printer_arguments {
 
     size_t cpu_num; /* Liczba cpu w /proc/stat */
     Queue* cpu_usage_queue;
     PCP_Sentry* cpu_usage_queue_sentry;
+    volatile sig_atomic_t* signal_received;
 
 } Printer_arguments;
 

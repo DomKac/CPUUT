@@ -3,6 +3,7 @@
 #include <reader.h>
 #include <analyzer.h>
 #include <printer.h>
+#include <watchdog.h>
 #include <pcp_sentry.h>
 
 #include <errno.h>
@@ -19,19 +20,26 @@ static Queue* cpu_stats_queue;
 static Queue* cpu_usage_queue;
 
 /* Critical section & PCP */
-static pthread_mutex_t stopped_mutex;
 static PCP_Sentry cpu_stats_queue_sentry;
 static PCP_Sentry cpu_usage_queue_sentry;
+
+/* Watchdog units */
+static Watchdog_unit wdog_reader;
+static Watchdog_unit wdog_analyzer;
+static Watchdog_unit wdog_printer;
+static Watchdog_unit wdog_logger;
 
 /* Threads arguments */
 static Reader_arguments reader_args;
 static Analyzer_arguments analyzer_args;
 static Printer_arguments printer_args;
+static Watchdog_arguments watchdog_args;
 
 /* Threads */
 static pthread_t reader;
 static pthread_t analyzer;
 static pthread_t printer;
+static pthread_t watchdog;
 
 /* Signal handling */
 static volatile sig_atomic_t signal_received = 0;
@@ -46,6 +54,7 @@ static int initialize_threads(void);
 static int initialize_reader_args(void);
 static int initialize_analyzer_args(void);
 static int initialize_printer_args(void);
+static int initialize_watchdog_args(void);
 
 /* Clear functions */
 static void delete_resources(void);
@@ -139,6 +148,11 @@ static int initialize_resources(void) {
         perror("Printer arguments initialization failed");
         return -1;
     }
+
+    if (initialize_watchdog_args() != 0) {
+        perror("Watchdog arguments initialization failed");
+        return -1;
+    }
     
     /* TO BE CONTINUED */
 
@@ -158,8 +172,6 @@ static int initialize_queues(void) {
     if ((cpu_usage_queue = queue_new(QUEUE_SIZE, cpu_usage_elem_size)) == NULL) {
         return -1;
     }
-
-    /* TO BE CONTINUED */
 
     return 0;
 }
@@ -196,12 +208,19 @@ static int initialize_reader_args(void) {
         return -1;
     }
 
+    // Watchdog_unit* wdog_reader = watchdog_unit_init();
+    if (watchdog_unit_init(&wdog_reader) != 0) {
+        perror("Reader watchdog unit initialization failed");
+        return -1;
+    }
+
     reader_args = (Reader_arguments) {
         .cpu_num = (size_t)cpus_num,
         .cpu_stats_queue = cpu_stats_queue,
         .proc_stat_file = proc_stat_file,
         .cpu_stats_queue_sentry = &cpu_stats_queue_sentry,
         .signal_received = &signal_received,
+        .wdog_reader = &wdog_reader,
     };
 
     return 0;
@@ -224,13 +243,20 @@ static int initialize_analyzer_args(void) {
         return -1;
     }
 
-    analyzer_args = (Analyzer_arguments){
+    // Watchdog_unit* wdog_analyzer = watchdog_unit_init();
+    if (watchdog_unit_init(&wdog_analyzer) != 0) {
+        perror("Analyzer watchdog unit initialization failed");
+        return -1;
+    }
+
+    analyzer_args = (Analyzer_arguments) {
         .cpu_num = (size_t)cpus_num,
         .cpu_stats_queue = cpu_stats_queue,
         .cpu_usage_queue = cpu_usage_queue,
         .cpu_stats_queue_sentry = &cpu_stats_queue_sentry,
         .cpu_usage_queue_sentry = &cpu_usage_queue_sentry,
         .signal_received = &signal_received,
+        .wdog_analyzer = &wdog_analyzer,
     };
 
     return 0;
@@ -248,11 +274,30 @@ static int initialize_printer_args(void) {
         return -1;
     }
 
-    printer_args = (Printer_arguments){
+    // Watchdog_unit* wdog_printer = watchdog_unit_init();
+    if (watchdog_unit_init(&wdog_printer) != 0) {
+        perror("Printer watchdog unit initialization failed");
+        return -1;
+    }
+
+    printer_args = (Printer_arguments) {
         .cpu_num = (size_t)cpus_num,
         .cpu_usage_queue = cpu_usage_queue,
         .cpu_usage_queue_sentry = &cpu_usage_queue_sentry,
         .signal_received = &signal_received,
+        .wdog_printer = &wdog_printer,
+    };
+
+    return 0;
+}
+
+static int initialize_watchdog_args(void) {
+
+    watchdog_args = (Watchdog_arguments) {
+        .signal_received = &signal_received,
+        .wdog_reader = &wdog_reader,
+        .wdog_analyzer = &wdog_analyzer,
+        .wdog_printer = &wdog_printer,
     };
 
     return 0;
@@ -275,6 +320,11 @@ static int initialize_threads(void) {
         return -1;
     }
 
+    if (pthread_create(&watchdog, NULL, watchdog_func, &watchdog_args) != 0) {
+        perror("Watchdog creation failed");
+        return -1;
+    }
+
     /* TO BE CONTINUED */
 
     return 0;
@@ -287,6 +337,11 @@ static void delete_resources(void) {
 
     if (cpu_usage_queue != NULL)
         queue_delete(cpu_usage_queue);
+
+    
+    watchdog_unit_destroy(&wdog_reader);
+    watchdog_unit_destroy(&wdog_analyzer);
+    watchdog_unit_destroy(&wdog_printer);
 
     pcp_sentry_destroy(&cpu_stats_queue_sentry);
     pcp_sentry_destroy(&cpu_usage_queue_sentry);
@@ -308,11 +363,16 @@ static void join_threads(void) {
         perror("Failed to join Printer");
     }
 
+    if (pthread_join(watchdog, NULL) != 0) {
+        perror("Failed to join Watchdog");
+    }
+
+    
 }
 
 static void signal_term(int signum) {
-    // if (signum == SIGINT)
-    signal_received = 1;
+    if (signum == SIGINT)
+        signal_received = 1;
     puts("Otrzymałem sygnał");
 }
 

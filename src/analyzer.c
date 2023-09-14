@@ -1,5 +1,6 @@
 #include <analyzer.h>
 #include <cpu.h>
+#include <watchdog_unit.h>
 #include <stdio.h>
 #include <memory.h>
 
@@ -21,6 +22,7 @@ void* analyzer_func(void *analyzer_args) {
     Queue* cpu_usage_queue = NULL;
     PCP_Sentry* cpu_stats_queue_sentry = NULL;
     PCP_Sentry* cpu_usage_queue_sentry = NULL;
+    Watchdog_unit* wdog_analyzer = NULL;
     volatile sig_atomic_t* signal_received = NULL;
 
     {
@@ -53,6 +55,12 @@ void* analyzer_func(void *analyzer_args) {
         cpu_usage_queue_sentry = temp_arg->cpu_usage_queue_sentry;
         if (cpu_usage_queue_sentry == NULL) {
             perror("Analyzer: variable assign failed (cpu_usage_queue_sentry)");
+            return NULL;
+        }
+
+        wdog_analyzer = temp_arg->wdog_analyzer;
+        if (wdog_analyzer == NULL) {
+            perror("Analyzer: variable assign failed (wdog_analyzer)");
             return NULL;
         }
 
@@ -114,6 +122,10 @@ void* analyzer_func(void *analyzer_args) {
         pcp_sentry_call_consumer(cpu_usage_queue_sentry);
         pcp_sentry_unlock(cpu_usage_queue_sentry);
         printf("Analyzer: signal received = %d\n", *signal_received);
+
+        watchdog_unit_mutex_lock(wdog_analyzer);
+        watchdog_unit_change_state(wdog_analyzer, WU_GREEN_STATE);
+        watchdog_unit_mutex_unlock(wdog_analyzer);
     }
     printf("Analyzer after loop: signal received = %d\n", *signal_received);
 

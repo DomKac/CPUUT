@@ -1,11 +1,12 @@
 #include <cpu.h>
 #include <reader.h>
+#include <watchdog_unit.h>
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
 
 /* musimy mieć kolejkę w którą władujemy przeczytane informacje */
-void* reader_func(void *reader_args) {
+void* reader_func(void* reader_args) {
 
     /* INITIALIZATIONS & CONTRACTS */
     if (reader_args == NULL) {
@@ -17,7 +18,8 @@ void* reader_func(void *reader_args) {
     FILE* proc_stat_file = NULL;
     Queue* cpu_stats_queue = NULL;
     PCP_Sentry* cpu_stats_queue_sentry = NULL;
-    volatile sig_atomic_t* signal_received = NULL;
+    Watchdog_unit* wdog_reader = NULL;
+    volatile sig_atomic_t *signal_received = NULL;
 
     {
         Reader_arguments *temp_arg = reader_args;
@@ -44,6 +46,12 @@ void* reader_func(void *reader_args) {
         cpu_stats_queue_sentry = temp_arg->cpu_stats_queue_sentry;
         if (cpu_stats_queue_sentry == NULL) {
             perror("Reader: variable assign failed (cpu_stats_queue_sentry)");
+            return NULL;
+        }
+
+        wdog_reader = temp_arg->wdog_reader;
+        if (wdog_reader == NULL) {
+            perror("Reader: variable assign failed (wdog_reader)");
             return NULL;
         }
 
@@ -95,6 +103,10 @@ void* reader_func(void *reader_args) {
 
         fflush(proc_stat_file);
         rewind(proc_stat_file);
+
+        watchdog_unit_mutex_lock(wdog_reader);
+        watchdog_unit_change_state(wdog_reader, WU_GREEN_STATE);
+        watchdog_unit_mutex_unlock(wdog_reader);
 
         nanosleep(&sleep_time, NULL);
         printf("Reader: signal received = %d\n", *signal_received);

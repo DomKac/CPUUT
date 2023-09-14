@@ -1,4 +1,5 @@
 #include <printer.h>
+#include <watchdog_unit.h>
 #include <stdio.h>
 
 static int print_cpu_usage(register const size_t cpu_num, const double cpu_usage_arr[const cpu_num]);
@@ -12,8 +13,9 @@ void* printer_func(void* printer_args) {
 
     register size_t cpu_num = 0;
     Queue* cpu_usage_queue = NULL;
-    PCP_Sentry* cpu_usage_queue_sentry;
-    volatile sig_atomic_t* signal_received = NULL;
+    PCP_Sentry* cpu_usage_queue_sentry = NULL;
+    Watchdog_unit* wdog_printer = NULL;
+    volatile sig_atomic_t *signal_received = NULL;
 
     {
         Printer_arguments *temp_arg = printer_args;
@@ -33,6 +35,12 @@ void* printer_func(void* printer_args) {
         cpu_usage_queue_sentry = temp_arg->cpu_usage_queue_sentry;
         if (cpu_usage_queue_sentry == NULL) {
             perror("Printer: variable assign failed (cpu_usage_queue_sentry)");
+            return NULL;
+        }
+
+        wdog_printer = temp_arg->wdog_printer;
+        if (wdog_printer == NULL) {
+            perror("Printer: variable assign failed (wdog_printer)");
             return NULL;
         }
 
@@ -64,6 +72,10 @@ void* printer_func(void* printer_args) {
         pcp_sentry_call_producer(cpu_usage_queue_sentry);
         pcp_sentry_unlock(cpu_usage_queue_sentry);
         printf("Printer: signal received = %d\n", *signal_received);
+
+        watchdog_unit_mutex_lock(wdog_printer);
+        watchdog_unit_change_state(wdog_printer, WU_GREEN_STATE);
+        watchdog_unit_mutex_unlock(wdog_printer);
     }
 
     printf("Printer after loop: signal received = %d\n", *signal_received);

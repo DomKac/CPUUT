@@ -3,6 +3,7 @@
 
 #include <pcp_sentry.h>
 #include <queue.h>
+#include <watchdog_unit.h>
 #include <signal.h>
 
 typedef struct Analyzer_arguments {
@@ -12,6 +13,7 @@ typedef struct Analyzer_arguments {
     Queue* cpu_usage_queue;
     PCP_Sentry* cpu_stats_queue_sentry;
     PCP_Sentry* cpu_usage_queue_sentry;
+    Watchdog_unit* wdog_analyzer;
     volatile sig_atomic_t* signal_received;
 
 } Analyzer_arguments;
